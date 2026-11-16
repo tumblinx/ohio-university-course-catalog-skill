@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Validate Python client
+        run: |
+          python -m py_compile ou_courses.py
+          python ou_courses.py --help
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package skill
+        run: |
+          mkdir -p dist
+          tar -czf "dist/ou-course-search-${GITHUB_REF_NAME}.tgz" \
+            --transform='s,^,ou-course-search/,' \
+            README.md SKILL.md ou_courses.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-archive
+          path: dist/*.tgz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-archive
+          path: dist
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tgz \
+            --repo "$GITHUB_REPOSITORY" \
+            --generate-notes
